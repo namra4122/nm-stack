@@ -1,0 +1,5 @@
+Debug -> creating the bash
+Debug -> starting pty
+Debug -> pty started
+Debug -> signal data: window size changes type:syscall.Signal
+Debug -> prev data: &{{{11010 3 19200 536872395 [4 255 255 127 23 21 18 255 3 28 26 25 17 19 22 15 1 0 20 255] 9600 9600}}} type:*term.State

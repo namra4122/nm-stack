@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -13,61 +14,48 @@ import (
 	"github.com/creack/pty"
 )
 
-func test() error {
-	// Create arbitrary command.
-	c := exec.Command("zsh")
+func shell() error {
+	c := exec.Command("bash")
 
-	// Start the command with a pty.
 	ptmx, err := pty.Start(c)
 	if err != nil {
 		return err
 	}
-	// Make sure to close the pty at the end.
-	defer func() { _ = ptmx.Close() }() // Best effort.
 
-	// Handle pty size.
+	defer ptmx.Close()
+
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
+
 	go func() {
-		for range ch {
+		for sig := range ch {
+			fmt.Fprintf(os.Stderr, "[DEBUG] signal: %v\n", sig)
+
 			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
 				log.Printf("error resizing pty: %s", err)
 			}
 		}
 	}()
-	ch <- syscall.SIGWINCH                        // Initial resize.
-	defer func() { signal.Stop(ch); close(ch) }() // Cleanup signals when done.
 
-	// Set stdin in raw mode.
+	ch <- syscall.SIGWINCH
+
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer func() { _ = term.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
-	// Copy stdin to the pty and the pty to stdout.
-	// NOTE: The goroutine will keep reading until the next keystroke before returning.
-	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
+	go func() {
+		_, _ = io.Copy(ptmx, os.Stdin)
+	}()
+
 	_, _ = io.Copy(os.Stdout, ptmx)
 
 	return nil
 }
 
 func main() {
-	c := exec.Command("grep", "--color=auto", "ba")
-	f, err := pty.Start(c)
-	if err != nil {
-		panic(err)
-	}
-
-	go func() {
-		f.Write([]byte("foo\n"))
-		f.Write([]byte("bar\n"))
-		f.Write([]byte("baz\n"))
-		f.Write([]byte{4}) // EOT
-	}()
-	io.Copy(os.Stdout, f)
-	if err := test(); err != nil {
+	if err := shell(); err != nil {
 		log.Fatal(err)
 	}
 }

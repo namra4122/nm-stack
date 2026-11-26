@@ -10,6 +10,12 @@
   Official Unix-domain stream socket support; use when connecting the client and server.
 - [tmux(1) manual](https://man7.org/linux/man-pages/man1/tmux.1.html)
   Describes the user-facing session/client model and detach/attach behavior; use for product-level expectations, not as a requirement to clone tmux.
+- [pty(7) man page](https://man7.org/linux/man-pages/man7/pty.7.html)
+  Authoritative definition of the master/slave pair; use when explaining what `pty.Start` returns.
+- [Linus Åkesson — The TTY demystified](https://www.linusakesson.net/programming/tty/)
+  Best explanation of line discipline, cooked/raw, SIGINT, SIGWINCH, SIGHUP; why a server-owned PTY survives detach.
+- [tmux wiki — Getting Started](https://github.com/tmux/tmux/wiki/Getting-Started)
+  Official description of the server/client model and attach/detach semantics.
 - [tmux source repository](https://github.com/tmux/tmux)
   Reference implementation for mature client/server architecture; consult only for specific design questions after the small vertical slice works.
 

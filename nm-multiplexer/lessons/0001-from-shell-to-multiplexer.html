@@ -15,6 +15,6 @@
 <div class="step"><h3>6 · Add resize and lifecycle edges</h3><p>Send terminal dimensions as a control message; handle resize, server shutdown, shell exit, stale socket cleanup, and simultaneous read/write failures. Only then consider multiple clients or sessions.</p></div>
 <h2>Your first small task</h2><p>Before adding features, make <code>go test ./...</code> pass. Inspect why the extra root <code>main</code> breaks the build, choose where the runnable programs should live, and write down the package layout you intend to keep. Bring me your proposed layout or code and I’ll review it before the next lesson.</p>
 <h2>Primary references</h2><ul><li><a href="https://pkg.go.dev/os/exec">Go <code>os/exec</code></a> — process start/wait lifecycle.</li><li><a href="https://github.com/creack/pty">creack/pty</a> — PTY creation and resizing helpers.</li><li><a href="https://pkg.go.dev/net">Go <code>net</code></a> — Unix-domain sockets.</li><li><a href="https://man7.org/linux/man-pages/man1/tmux.1.html">tmux manual</a> — client/session behaviors to borrow conceptually.</li></ul>
-<nav><a href="../MISSION.md">Mission</a> · <a href="../RESOURCES.md">Resources</a></nav>
+<nav><a href="0002-multiplexer-revision.html">Next: Lesson 0002 →</a> · <a href="../MISSION.md">Mission</a> · <a href="../RESOURCES.md">Resources</a></nav>
 <footer>Ask follow-up questions whenever a step or design choice is unclear. This course is paced by your code and your questions, not by a fixed syllabus.</footer>
 </main></body></html>

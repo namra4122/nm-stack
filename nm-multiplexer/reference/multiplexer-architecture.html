@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multiplexer Cheat Sheet</title><link rel="stylesheet" href="../assets/lesson.css"></head>
+<body><main>
+<header><div class="eyebrow">Reference</div><h1>Multiplexer cheat sheet</h1><p class="small">Architecture, responsibilities, and glossary. Lessons use these terms exactly.</p></header>
+
+<h2>Byte path</h2>
+<div class="pipe"><span>terminal (raw)</span><i>⇄</i><span>client</span><i>⇄</i><span>Unix socket</span><i>⇄</i><span class="own">server</span><i>⇄</i><span class="own">PTY master</span><i>⇄</i><span class="own">line discipline</span><i>⇄</i><span class="own">PTY slave</span><i>⇄</i><span class="own">shell</span></div>
+<p class="small">Shaded components survive detach.</p>
+
+<h2>Who does what</h2>
+<table>
+<tr><th>Component</th><th>Owns</th><th>Go in this repo</th></tr>
+<tr><td>Client</td><td>Raw mode + restore on the real terminal; forwarding keystrokes; reporting size on SIGWINCH; printing output</td><td><code>term.MakeRaw</code>, <code>term.Restore</code>, <code>signal.Notify(SIGWINCH)</code>, <code>term.GetSize</code>, <code>net.Dial("unix", …)</code></td></tr>
+<tr><td>Server</td><td>Shell process + PTY lifetime; applying size; accepting/dropping clients</td><td><code>exec.Command</code>, <code>pty.Start</code>, <code>pty.Setsize</code>, <code>net.Listen("unix", …)</code>, <code>cmd.Wait</code></td></tr>
+<tr><td>Kernel</td><td>Echo, cooked/raw editing, ^C→SIGINT, SIGWINCH delivery, SIGHUP on hangup</td><td>—</td></tr>
+</table>
+
+<h2>Glossary</h2>
+<table>
+<tr><td><strong>PTY</strong></td><td>Pseudoterminal: a pair of virtual character devices forming a bidirectional channel. <a href="https://man7.org/linux/man-pages/man7/pty.7.html">pty(7)</a></td></tr>
+<tr><td><strong>Master</strong></td><td>The PTY end the server reads/writes (<code>*os.File</code> from <code>pty.Start</code>).</td></tr>
+<tr><td><strong>Slave</strong></td><td>The PTY end that behaves exactly like a classical terminal; the shell's stdin/stdout/stderr.</td></tr>
+<tr><td><strong>Line discipline</strong></td><td>Kernel TTY layer between master and slave: echo, line editing, signal characters. <a href="https://www.linusakesson.net/programming/tty/">Åkesson</a></td></tr>
+<tr><td><strong>Cooked / raw</strong></td><td>Cooked (canonical): line-buffered with editing. Raw: bytes passed through immediately, uninterpreted.</td></tr>
+<tr><td><strong>Server</strong></td><td>Long-lived process holding all state: shells, PTYs, output.</td></tr>
+<tr><td><strong>Client</strong></td><td>Short-lived process bridging one real terminal to the server over a socket.</td></tr>
+<tr><td><strong>Attach / detach</strong></td><td>Start / end a client connection. Detach never ends the shell.</td></tr>
+<tr><td><strong>SIGWINCH</strong></td><td>Window-change signal the TTY sends the foreground job when its size is set.</td></tr>
+<tr><td><strong>SIGHUP</strong></td><td>Hangup signal sent to a whole session when its terminal goes away; why shells die without a multiplexer.</td></tr>
+<tr><td><strong>Framing</strong></td><td>Splitting a byte stream into typed messages (e.g. data vs resize). Needed once control messages exist.</td></tr>
+</table>
+<nav><a href="../lessons/0001-from-shell-to-multiplexer.html">Lesson 0001</a> · <a href="../lessons/0002-multiplexer-revision.html">Lesson 0002</a></nav>
+</main></body></html>

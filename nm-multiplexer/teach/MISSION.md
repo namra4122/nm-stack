@@ -14,3 +14,7 @@ I have studied how a multiplexer works and want to build my own. The goal is a w
 
 ## Out of scope
 - Full tmux feature parity (multiple sessions, windows, panes, layout management, and configuration) until the single-session vertical slice works.
+
+## Path
+- Milestones, in order, with acceptance checks: [ROADMAP.md](ROADMAP.md)
+- Where we are vs where we're going: [reference/architecture-current-vs-target.html](reference/architecture-current-vs-target.html)

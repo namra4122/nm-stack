@@ -139,8 +139,6 @@ func runShell(ctx context.Context) (err error) {
 		_, _ = io.Copy(nmux, os.Stdin)
 	}()
 
-	// TODO: check the cmd, if it is "hello" print "world". Otherwise run everything as normal
-
 	// Output direction: PTY master → your terminal. This blocks on the main
 	// goroutine, so runShell lasts as long as bash. When bash exits the slave
 	// closes, reading the master returns an error (EIO on Linux), and io.Copy

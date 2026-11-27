@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Architecture: current vs target</title><link rel="stylesheet" href="../assets/lesson.css">
+<style>pre.mermaid{background:#fff;border-left:none;border:1px solid var(--line);text-align:center}.gap{color:#a9503f;font-weight:600}</style></head>
+<body><main>
+<header><div class="eyebrow">Reference</div><h1>Architecture: what runs today vs where we're going</h1>
+<p class="small">Diagram A is drawn from a live run on 2026-11-27: <code>ps</code>, <code>lsof</code> and a Jaeger trace. Diagram B is drawn from the tmux source at commit <code>a6ce3d0</code>. Gaps marked <span class="gap">?</span> are yours to decide.</p></header>
+
+<h2>A. Current state, built up</h2>
+<h3>A1. Your terminal and the client</h3>
+<pre class="mermaid">
+flowchart LR
+  T["your terminal<br/>/dev/ttys005"] <-->|"fd 0,1,2<br/>raw mode"| C["nmux-client<br/>pid 51013"]
+</pre>
+<h3>A2. Add the PTY and bash</h3>
+<pre class="mermaid">
+flowchart LR
+  T["your terminal<br/>/dev/ttys005"] <-->|"fd 0,1,2<br/>raw mode"| C["nmux-client<br/>pid 51013"]
+  C <-->|"fd 4<br/>/dev/ptmx"| M["PTY master"]
+  M <--> L["line discipline"] <--> SL["PTY slave<br/>/dev/ttys007"]
+  SL <-->|"fd 0,1,2"| B["bash pid 51014<br/>parent = client"]
+</pre>
+<h3>A3. Add the server, which is not connected to any of it</h3>
+<pre class="mermaid">
+flowchart LR
+  T["your terminal<br/>/dev/ttys005"] <-->|"fd 0,1,2<br/>raw mode"| C["nmux-client<br/>pid 51013"]
+  C <-->|"fd 4<br/>/dev/ptmx"| M["PTY master"]
+  M <--> L["line discipline"] <--> SL["PTY slave<br/>/dev/ttys007"]
+  SL <-->|"fd 0,1,2"| B["bash pid 51014<br/>parent = client"]
+  P["nmux-client -probe"] -->|"HTTP GET /health, /memory<br/>over server.sock"| S["nmux-server pid 51005<br/>fd 5 = server.sock"]
+</pre>
+
+<h3>A4. The byte path over time</h3>
+<pre class="mermaid">
+sequenceDiagram
+  participant K as terminal (raw)
+  participant C as nmux-client
+  participant M as PTY master
+  participant L as line discipline
+  participant B as bash
+  K->>C: keystroke byte (no local echo)
+  C->>M: io.Copy(nmux, os.Stdin)
+  M->>L: byte
+  L->>B: byte on slave stdin
+  B->>L: output
+  L->>M: output + echo
+  M->>C: io.Copy(os.Stdout, nmux)
+  C->>K: bytes to screen
+  Note over K,C: window resized
+  K-->>C: SIGWINCH
+  C->>M: InheritSize (read stdin size, set master size)
+  L-->>B: SIGWINCH to foreground job
+</pre>
+
+<h2>Evidence side by side</h2>
+<table>
+<tr><th>Claim in A</th><th>ps / lsof</th><th>Jaeger trace a38cd8a15d4c</th></tr>
+<tr><td>Client owns the PTY master</td><td><code>nmux-clie 51013 4u /dev/ptmx</code></td><td><code>client.shell</code> span, 5502 ms</td></tr>
+<tr><td>bash is the client's child</td><td><code>51014 PPID 51013 ttys007 bash</code></td><td><code>pty.started</code> event, <code>pid=51014</code></td></tr>
+<tr><td>bash is on the slave side</td><td><code>bash 51014 0u/1u/2u /dev/ttys007</code></td><td>(not traced)</td></tr>
+<tr><td>Shell mode never touches the server</td><td>client has no unix socket fd</td><td>shell trace has zero <code>nmux-server</code> spans</td></tr>
+<tr><td>Server only does HTTP control calls</td><td><code>nmux-serv 51005 5u unix ./server/server.sock</code></td><td>probe trace: <code>client.request /health → server GET /health</code></td></tr>
+</table>
+<p class="small">The resize event read <code>rows=0 cols=0</code> because the test ran under <code>script</code> with no real window. In your own terminal it will show real numbers.</p>
+
+<h2>B. Target state</h2>
+<h3>B1. How tmux does it (verified in source)</h3>
+<pre class="mermaid">
+flowchart LR
+  T["user terminal"] <-->|"stdin/stdout"| C["tmux client"]
+  C -->|"dup(stdin) sent as fd<br/>MSG_IDENTIFY_STDIN<br/>client.c:470-473"| S["tmux server"]
+  S -.->|"reads and writes the terminal itself<br/>tty.c:334"| T
+  S -->|"fdforkpty<br/>spawn.c:485"| M["pane PTY master"]
+  M <--> B["shell"]
+  M -->|"window_pane_read_callback<br/>window.c:1723"| G["grid = screen state<br/>grid.c"]
+  G -->|"redraw on attach<br/>server-fn.c:59"| T
+</pre>
+<ul class="small">
+<li>The fd is passed with <code>SCM_RIGHTS</code> (<code>compat/imsg-buffer.c:798</code>). The server keeps it as <code>c-&gt;fd</code> (<code>server-client.c:3094</code>).</li>
+<li><code>MSG_RESIZE</code> has no payload. If it has data, the server rejects it (<code>server-client.c:2833</code>). The server reads the size itself with <code>ioctl(c-&gt;fd, TIOCGWINSZ)</code> (<code>tty.c:138</code>).</li>
+</ul>
+
+<h3>B2. nmux target, with your decisions left open</h3>
+<pre class="mermaid">
+flowchart LR
+  T["your terminal (raw)"] <--> C["nmux-client<br/>(a view)"]
+  C <-->|"one long-lived connection<br/>? framing: data vs resize vs detach"| S["nmux-server<br/>owns everything below"]
+  S <--> M["PTY master"] <--> B["bash<br/>parent = server"]
+  M -->|"? what do we keep for reattach"| R["? scrollback / screen state"]
+</pre>
+
+<h2>A → B: the curriculum</h2>
+<table>
+<tr><th>Today (A)</th><th>Target (B)</th><th>Open question</th></tr>
+<tr><td>Client is bash's parent</td><td>Server is bash's parent</td><td>—</td></tr>
+<tr><td>Client holds <code>/dev/ptmx</code></td><td>Server holds <code>/dev/ptmx</code></td><td>—</td></tr>
+<tr><td>Server speaks short HTTP requests</td><td>Long-lived byte stream</td><td><span class="gap">?</span> hijack HTTP, or a raw <code>net.Conn</code></td></tr>
+<tr><td>One kind of data (bytes)</td><td>Bytes plus control messages</td><td><span class="gap">?</span> framing format</td></tr>
+<tr><td><code>InheritSize</code> in one process</td><td>Size crosses the socket</td><td><span class="gap">?</span> send the numbers (your cheat sheet) or pass the fd (tmux)</td></tr>
+<tr><td>Client exit closes master, bash gets SIGHUP</td><td>Client exit leaves bash alive</td><td>—</td></tr>
+<tr><td>Nothing to redraw</td><td>Reattach shows the screen</td><td><span class="gap">?</span> replay raw bytes, or keep a parsed screen like tmux's grid</td></tr>
+</table>
+
+<nav><a href="multiplexer-architecture.html">Cheat sheet</a> · <a href="../MISSION.md">Mission</a> · <a href="../lessons/0002-multiplexer-revision.html">Lesson 0002</a></nav>
+</main><script src="../assets/diagram.js"></script></body></html>
